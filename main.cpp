@@ -11,6 +11,7 @@
 #include <X11/Xatom.h>
 #include <X11/Xutil.h>
 #endif
+#include <getopt.h>
 #include <opencv/cv.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -18,9 +19,6 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <curl/curl.h>
 #include <curl/easy.h>
-
-//#define SOBEL_FILTER
-//#define CANVAS_PINTURILLO
 
 using namespace cv;
 typedef Point3_<uint8_t> Pixel;
@@ -199,12 +197,79 @@ void draw_image (Display *display, Mat *image, int thresh, Window window)
   }
 }
 
+void print_usage() {
+  printf("Usage : (URL mandatory) image_to_mouse [--sobel] [hwld] -u <URL>\n");
+}
+
 int main(int argc, char *argv[])
 {
   CURL* curl;
   CURLcode res;
-  char* url;// = "http://www.personal.psu.edu/jyc5774/jpg.jpg";
 
+  // URL of image to draw
+  char* url = NULL;// = "http://www.personal.psu.edu/jyc5774/jpg.jpg";
+
+  // Title of window to use for drawing
+  char *window_title = NULL; //"[Not Saved]";
+
+  // Size of output image
+  Size canvas_size;
+  canvas_size.width = 128;
+  canvas_size.height = 128;
+
+  //  Thresholding values
+  int thresh = 100;
+  int max_thresh = 255;
+
+  char opt = 0;
+  static struct option long_options[] = {
+      {"help", no_argument, 0, 'h' },
+      {"sobel", no_argument, 0, 's' },
+      {"width", optional_argument, 0, 'w' },
+      {"length", optional_argument, 0, 'l' },
+      {"window", optional_argument, 0, 'd' },
+      {"url", required_argument, 0, 'u' },
+      {NULL, 0, NULL,  0 }
+  };
+
+  opt = getopt_long(argc, argv,"hswldu:", long_options, NULL);
+  if (opt == -1) {
+    print_usage();
+    return -1;
+  }
+
+  do {
+    switch (opt) {
+      case 's':
+        #define SOBEL_FILTER
+        break;
+      case 'w':
+        canvas_size.width = atoi(optarg);
+        break;
+      case 'l':
+        canvas_size.height = atoi(optarg);
+        break;
+      case 'u':
+        // Copy argument into URL
+        url = optarg;
+        break;
+      case 'd':
+        // Copy argument into window name
+        window_title = optarg;
+        break;
+      case 'h':
+      case ':':
+      case '?':
+      default:
+        print_usage();
+        return -1;
+    }
+  } while ((opt = getopt_long(argc, argv,"hswldu:", long_options, NULL)) != -1);
+
+  if (url == NULL) {
+    printf("Missing url \n");
+    print_usage();
+  }
 
   // Init X windows system
   Display *display = XOpenDisplay(NULL);
@@ -214,14 +279,6 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  if(argc < 2 || argc > 2)
-  {
-    printf("Program needs exactly 1 arg (URL of image) %d \n", argc);
-    return -1;
-  }
-
-  // Copy argument into URL
-  url = argv[1];
 
   FILE* fp = fopen("test.png", "wb");
   if (!fp)
@@ -267,15 +324,6 @@ int main(int argc, char *argv[])
   // Resizing output matrix
   Mat bw_resize_image;
 
-  // Size of output image
-  Size canvas_size;
-  canvas_size.width = 128;
-  canvas_size.height = 128;
-
-  //  Thresholding values
-  int thresh = 100;
-  int max_thresh = 255;
-
 #ifdef SOBEL_FILTER
   // Sobel vars 
   int scale = 1;
@@ -310,8 +358,13 @@ int main(int argc, char *argv[])
   // Resizing
   resize(gray_image, bw_resize_image, canvas_size, 0, 0, INTER_AREA);
 
-  // If the parameter is available, set the window specified by the user in foreground
-  Window drawing_window = set_window(display, "[Not Saved]");
+  Window drawing_window;
+  if (window_title != NULL) {
+    // If the parameter is available, set the window specified by the user in foreground
+    drawing_window = set_window(display, window_title);
+  } else {
+    drawing_window = DefaultRootWindow(display);
+  }
 
   // Pause for 2 seconds.
   sleep(2000);
