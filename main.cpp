@@ -99,7 +99,7 @@ Window set_window (Display *display, char *window_name)
 #endif
 }
 
-void draw_image (Display *display, Mat *image, int thresh, Window window)
+void draw_image (Display *display, Mat *image, int max_val, Window window)
 {
 #ifdef _WIN32
   // This structure will be used to create the keyboard input event.
@@ -108,14 +108,13 @@ void draw_image (Display *display, Mat *image, int thresh, Window window)
   XEvent event;
 #endif
 
-  // Do thresholding and drawing at the same time
   // Draw line by line
   for(int i = 0; i < image->rows; i++)
   {
     int j = 0;
     while(j < image->cols)
     {
-      if(static_cast<int>(image->at<uchar>(i,j)) < thresh)
+      if(static_cast<int>(image->at<uchar>(i,j)) < max_val)
       {
         // Sleep 50ms to let actualize
         sleep(50);
@@ -155,9 +154,8 @@ void draw_image (Display *display, Mat *image, int thresh, Window window)
         XFlush(display);
 #endif
 
-        while((static_cast<int>(image->at<uchar>(i,j)) < thresh) && j < image->cols)
-        {
-          image->at<uchar>(i,j) = 0;
+        // Treat rows of pixels under threshold as a line
+        while((static_cast<int>(image->at<uchar>(i,j)) < max_val) && j < image->cols) {
           j++;
         }
 
@@ -185,11 +183,6 @@ void draw_image (Display *display, Mat *image, int thresh, Window window)
         XFlush(display);
 #endif
 
-        //image->at<uchar>(i,j) = 0;
-      }
-      else
-      {
-        image->at<uchar>(i,j) = 255;
       }
 
       j++;
@@ -214,8 +207,8 @@ int main(int argc, char *argv[])
 
   // Size of output image
   Size canvas_size;
-  canvas_size.width = 128;
-  canvas_size.height = 128;
+  canvas_size.width = 256;
+  canvas_size.height = 256;
 
   //  Thresholding values
   int thresh = 100;
@@ -332,7 +325,6 @@ int main(int argc, char *argv[])
 
   Mat grad_x, grad_y;
   Mat abs_grad_x, abs_grad_y;
-  Mat grad;
 
   // Computing X gradient
   Sobel(gray_image, grad_x, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT);
@@ -343,17 +335,17 @@ int main(int argc, char *argv[])
   convertScaleAbs(grad_y, abs_grad_y);
 
   // Total gradient (approximated)
-  addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
+  addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, gray_image);
   // See http://docs.opencv.org/doc/tutorials/imgproc/imgtrans/sobel_derivatives/sobel_derivatives.html
-
-  // Thresholding
-  threshold(grad, bw_image, thresh, max_thresh, THRESH_BINARY);
 #endif
 
   /*
     1 point = 6 (length) x 4 (width) pixels
     canvas = ~ 500 x 500 pixels
   */
+
+  // Thresholding
+  threshold(gray_image, gray_image, thresh, max_thresh, THRESH_BINARY);
 
   // Resizing
   resize(gray_image, bw_resize_image, canvas_size, 0, 0, INTER_AREA);
@@ -370,7 +362,7 @@ int main(int argc, char *argv[])
   sleep(2000);
 
   // Convert image to mouse inputs
-  draw_image(display, &bw_resize_image, thresh, drawing_window);
+  draw_image(display, &bw_resize_image, max_thresh, drawing_window);
 
 #ifndef _WIN32
   // Close X connection
